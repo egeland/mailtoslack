@@ -63,5 +63,5 @@ func main() {
 		return
 	}
 	log.Printf("Listening for mail on port %s", port)
-	smtpd.ListenAndServe(fmt.Sprintf("127.0.0.1:%s", port), mailHandler, "Sendmail 8.11.3", "")
+	smtpd.ListenAndServe(fmt.Sprintf("0.0.0.0:%s", port), mailHandler, "Sendmail 8.11.3", "")
 }
