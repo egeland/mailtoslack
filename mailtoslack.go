@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/mail"
 	"os"
+	"strings"
 
 	"github.com/mhale/smtpd"
 	"github.com/nlopes/slack"
@@ -17,6 +18,7 @@ var (
 	port         = os.Getenv("PORT")
 	slackToken   = os.Getenv("SLACK_TOKEN")
 	slackChannel = os.Getenv("SLACK_CHANNEL")
+	domainList   = os.Getenv("DOMAIN_LIST")
 )
 
 func mailHandler(origin net.Addr, from string, to []string, data []byte) {
@@ -24,6 +26,24 @@ func mailHandler(origin net.Addr, from string, to []string, data []byte) {
 	subject := msg.Header.Get("Subject")
 	sender := msg.Header.Get("From")
 	recipient := msg.Header.Get("To")
+
+	// If we have been given a list of recipient domains, filter on these
+	if len(domainList) > 0 {
+		domains := strings.Split(domainList, ",")
+		rcpt, _ := mail.ParseAddress(recipient)
+		recipientDomain := strings.Split(rcpt.Address, "@")[1]
+		ok := false
+		for i := 0; i < len(domains); i++ {
+			if recipientDomain == domains[i] {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return
+		}
+	}
+
 	body, err := ioutil.ReadAll(msg.Body)
 	if err != nil {
 		log.Fatal(err)
