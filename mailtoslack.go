@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/mail"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/mhale/smtpd"
 	"github.com/nlopes/slack"
+	"github.com/veqryn/go-email/email"
 )
 
 var (
@@ -19,10 +19,11 @@ var (
 	slackToken   = os.Getenv("SLACK_TOKEN")
 	slackChannel = os.Getenv("SLACK_CHANNEL")
 	domainList   = os.Getenv("DOMAIN_LIST")
+	filetype     string
 )
 
 func mailHandler(origin net.Addr, from string, to []string, data []byte) {
-	msg, _ := mail.ReadMessage(bytes.NewReader(data))
+	msg, _ := email.ParseMessage(bytes.NewReader(data))
 	subject := msg.Header.Get("Subject")
 	sender := msg.Header.Get("From")
 	recipient := msg.Header.Get("To")
@@ -43,30 +44,37 @@ func mailHandler(origin net.Addr, from string, to []string, data []byte) {
 			return
 		}
 	}
-
-	body, err := ioutil.ReadAll(msg.Body)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
 	api := slack.New(slackToken)
-	postData := slack.PostMessageParameters{}
-	attachment := slack.Attachment{
-		Text:       string(body),
-		Title:      fmt.Sprintf("Subject: %s", subject),
-		Fallback:   subject,
-		AuthorName: fmt.Sprintf("To: %s", recipient),
-		Footer:     fmt.Sprintf("From: %s", sender),
+	for _, part := range msg.MessagesContentTypePrefix("text/plain") {
+		uploadparams := slack.FileUploadParameters{
+			Channels:       []string{slackChannel},
+			Title:          fmt.Sprintf("Subject: %s", subject),
+			Filetype:       "text",
+			Content:        string(part.Body),
+			InitialComment: fmt.Sprintf("To: %s\nFrom: %s", recipient, sender),
+		}
+		file, err := api.UploadFile(uploadparams)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		log.Printf("Message successfully sent to channel %s as text file %s", slackChannel, file.Name)
 	}
-	postData.Username = "Mailbot"
-	postData.IconEmoji = ":email:"
-	postData.Attachments = []slack.Attachment{attachment}
-	channelID, timestamp, err := api.PostMessage(slackChannel, "", postData)
-	if err != nil {
-		log.Fatal(err)
-		return
+	for _, part := range msg.MessagesContentTypePrefix("text/html") {
+		uploadparams := slack.FileUploadParameters{
+			Channels:       []string{slackChannel},
+			Title:          fmt.Sprintf("Subject: %s", subject),
+			Filetype:       "html",
+			Content:        string(part.Body),
+			InitialComment: fmt.Sprintf("To: %s\nFrom: %s", recipient, sender),
+		}
+		file, err := api.UploadFile(uploadparams)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		log.Printf("Message successfully sent to channel %s as HTML file %s", slackChannel, file.Name)
 	}
-	log.Printf("Message successfully sent to channel %s at %s", channelID, timestamp)
 }
 
 func main() {
