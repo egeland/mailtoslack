@@ -23,7 +23,11 @@ var (
 )
 
 func mailHandler(origin net.Addr, from string, to []string, data []byte) {
-	msg, _ := email.ParseMessage(bytes.NewReader(data))
+	msg, err := email.ParseMessage(bytes.NewReader(data))
+	if err != nil {
+		log.Printf("error parsing message: %s", err)
+		return
+	}
 	subject := msg.Header.Get("Subject")
 	sender := msg.Header.Get("From")
 	recipient := msg.Header.Get("To")
@@ -31,7 +35,11 @@ func mailHandler(origin net.Addr, from string, to []string, data []byte) {
 	// If we have been given a list of recipient domains, filter on these
 	if len(domainList) > 0 {
 		domains := strings.Split(domainList, ",")
-		rcpt, _ := mail.ParseAddress(recipient)
+		rcpt, err := mail.ParseAddress(recipient)
+		if err != nil {
+			log.Printf("error parsing recipient email '%s' : %s", recipient, err)
+			return
+		}
 		recipientDomain := strings.Split(rcpt.Address, "@")[1]
 		ok := false
 		for i := 0; i < len(domains); i++ {
@@ -41,6 +49,7 @@ func mailHandler(origin net.Addr, from string, to []string, data []byte) {
 			}
 		}
 		if !ok {
+			log.Printf("skipping, as recipient domain '%s' is not in whitelist", recipientDomain)
 			return
 		}
 	}
@@ -55,7 +64,7 @@ func mailHandler(origin net.Addr, from string, to []string, data []byte) {
 		}
 		file, err := api.UploadFile(uploadparams)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("failed to upload plaintext file: %s", err)
 			return
 		}
 		log.Printf("Message successfully sent to channel %s as text file %s", slackChannel, file.Name)
@@ -70,7 +79,7 @@ func mailHandler(origin net.Addr, from string, to []string, data []byte) {
 		}
 		file, err := api.UploadFile(uploadparams)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("failed to upload html file: %s", err)
 			return
 		}
 		log.Printf("Message successfully sent to channel %s as HTML file %s", slackChannel, file.Name)
@@ -84,11 +93,9 @@ func main() {
 	}
 	if slackToken == "" {
 		log.Fatal("No SLACK_TOKEN found")
-		return
 	}
 	if slackChannel == "" {
 		log.Fatal("No SLACK_CHANNEL found")
-		return
 	}
 	log.Printf("Listening for mail on port %s", port)
 	smtpd.ListenAndServe(fmt.Sprintf("0.0.0.0:%s", port), mailHandler, "Sendmail 8.11.3", "")
