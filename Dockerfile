@@ -4,10 +4,11 @@ MAINTAINER Frode Egeland <egeland@gmail.com>
 
 WORKDIR /go/src/app
 
+RUN apk add --virtual buildstuff git --no-cache
+
 COPY mailtoslack.go app.go
 
-RUN apk add --virtual buildstuff git --no-cache && \
-    go get && \
+RUN go get && \
     go build -i
 
 FROM golang:1-alpine
